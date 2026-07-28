@@ -1,0 +1,3 @@
+-- FreeCourse intentionally ships without seed data.
+-- Register the first user through the application, then follow
+-- docs/admin-bootstrap.md to assign the administrator role.
