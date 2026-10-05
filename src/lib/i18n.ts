@@ -20,8 +20,8 @@ const dictionary: Dictionary = {
   logoAlt: text("FreeCourse logo", "Логотип FreeCourse"),
   wordmarkLabel: text("FreeCourse", "FreeCourse"),
   landingDescription: text(
-    "A learning platform for students, teachers, and coordinators. Create courses, publish learning materials, assign homework, review submissions, and track learning progress.",
-    "Образовательная платформа для учеников, преподавателей и кураторов. Здесь можно создавать курсы, размещать учебные материалы, выдавать домашние задания и отслеживать результаты обучения.",
+    "A learning platform for students, teachers, and administrators. Create courses, publish learning materials, assign homework, review submissions, and track learning progress.",
+    "Образовательная платформа для учеников, преподавателей и администраторов. Здесь можно создавать курсы, размещать учебные материалы, выдавать домашние задания и отслеживать результаты обучения.",
   ),
   platformFeatures: text("Platform features", "Возможности платформы"),
   coursesAndLessons: text("Courses and lessons", "Курсы и уроки"),
@@ -190,6 +190,35 @@ const dictionary: Dictionary = {
   statistics: text("Statistics", "Статистика"),
   settings: text("Settings", "Настройки"),
   createUser: text("Create user", "Создать пользователя"),
+  inviteUser: text("Invite user", "Пригласить пользователя"),
+  inviteUserHint: text(
+    "Send an invitation for a teacher or student to finish setting up their account.",
+    "Отправьте приглашение преподавателю или ученику, чтобы он завершил настройку аккаунта.",
+  ),
+  sendInvitation: text("Send invitation", "Отправить приглашение"),
+  invitationSent: text("Invitation sent.", "Приглашение отправлено."),
+  invitationFailed: text(
+    "The invitation could not be sent. The user may already exist.",
+    "Не удалось отправить приглашение. Возможно, пользователь уже существует.",
+  ),
+  invitationProfileFailed: text(
+    "The invitation was created, but the profile could not be prepared.",
+    "Приглашение создано, но не удалось подготовить профиль.",
+  ),
+  invitationsNotConfigured: text(
+    "Invitations are not configured.",
+    "Приглашения не настроены.",
+  ),
+  invitationsRequireSupabase: text(
+    "Invitations require a configured Supabase project.",
+    "Для приглашений требуется настроенный проект Supabase.",
+  ),
+  invalidInvitation: text(
+    "Enter a valid email, name, and supported role.",
+    "Укажите корректные e-mail, имя и поддерживаемую роль.",
+  ),
+  unauthorized: text("You are not authorized to do this.", "Недостаточно прав для этого действия."),
+  forbidden: text("You are not allowed to do this.", "Это действие вам недоступно."),
   createCourse: text("Create course", "Создать курс"),
   title: text("Title", "Название"),
   description: text("Description", "Описание"),
@@ -219,6 +248,14 @@ const dictionary: Dictionary = {
   lessonsCount: text("lessons", "урока"),
   studentsCount: text("students", "учеников"),
   progress: text("Progress", "Прогресс"),
+  markLessonCompleted: text("Mark lesson completed", "Отметить урок выполненным"),
+  markLessonIncomplete: text("Mark lesson incomplete", "Снять отметку о выполнении"),
+  lessonCompleted: text("Completed", "Выполнено"),
+  lessonNotCompleted: text("Not completed", "Не выполнено"),
+  progressUpdateFailed: text(
+    "Could not update lesson progress.",
+    "Не удалось обновить прогресс урока.",
+  ),
   notAssigned: text("not assigned", "не назначен"),
   accessHelp: text(
     "Select a recipient, then grant or revoke access to a specific lesson.",

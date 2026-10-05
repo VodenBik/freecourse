@@ -666,7 +666,9 @@ export async function deleteCourse(supabase: SupabaseClient, courseId: string) {
       .map((material) => material.file_path)
       .filter((path): path is string => Boolean(path));
     if (filePaths.length) {
-      const { error: storageError } = await supabase.storage.from("lesson-materials").remove(filePaths);
+      const { error: storageError } = await supabase.storage
+        .from("lesson-materials")
+        .remove(filePaths);
       assertNoError(storageError, "Could not delete course material files");
     }
   }
@@ -787,7 +789,10 @@ export async function deleteLesson(supabase: SupabaseClient, lessonId: string) {
     .map((material) => material.file_path)
     .filter((path): path is string => Boolean(path));
   if (filePaths.length) {
-    await supabase.storage.from("lesson-materials").remove(filePaths);
+    const { error: storageError } = await supabase.storage
+      .from("lesson-materials")
+      .remove(filePaths);
+    assertNoError(storageError, "Could not delete lesson material files");
   }
 
   const { error } = await supabase.from("lessons").delete().eq("id", lessonId);
@@ -825,14 +830,22 @@ export async function uploadLessonMaterial(
     lesson_id: draft.lessonId,
     title: draft.title,
     material_type: draft.type,
-    file_path: filePath,
+    file_path: filePath || null,
     file_size: file?.size ?? 0,
     external_url: draft.type === "video" ? externalUrl : null,
     content: draft.type === "text" ? content : null,
     is_downloadable: draft.downloadable,
     sort_order: draft.order,
   });
-  assertNoError(error, "Could not save the material");
+  if (error) {
+    if (filePath) {
+      const { error: rollbackError } = await supabase.storage
+        .from("lesson-materials")
+        .remove([filePath]);
+      assertNoError(rollbackError, "Could not roll back the material upload");
+    }
+    assertNoError(error, "Could not save the material");
+  }
 }
 
 export async function updateLessonMaterial(
@@ -852,21 +865,27 @@ export async function updateLessonMaterial(
     throw new Error("Enter the material text.");
   }
 
-  let filePatch: Partial<{ file_path: string; file_size: number }> = {};
-  if (file) {
-    const { data: current, error: currentError } = await supabase
-      .from("lesson_materials")
-      .select("lesson_id")
-      .eq("id", id)
-      .single();
-    assertNoError(currentError, "Could not find the material");
+  const { data: current, error: currentError } = await supabase
+    .from("lesson_materials")
+    .select("lesson_id, file_path")
+    .eq("id", id)
+    .single();
+  assertNoError(currentError, "Could not find the material");
 
-    const lessonId = asString((current as Row).lesson_id);
+  const lessonId = asString((current as Row).lesson_id);
+  const previousFilePath = asString((current as Row).file_path);
+  const clearsStoredFile = patch.type === "video" || patch.type === "text";
+  let uploadedFilePath = "";
+  let filePatch: Partial<{ file_path: string | null; file_size: number }> = clearsStoredFile
+    ? { file_path: null, file_size: 0 }
+    : {};
+  if (file) {
     const filePath = `${lessonId}/${Date.now()}-${file.name.replaceAll(" ", "-")}`;
     const { error: uploadError } = await supabase.storage
       .from("lesson-materials")
       .upload(filePath, file, { upsert: false });
     assertNoError(uploadError, "Could not upload the material");
+    uploadedFilePath = filePath;
     filePatch = { file_path: filePath, file_size: file.size };
   }
 
@@ -882,12 +901,34 @@ export async function updateLessonMaterial(
       ...filePatch,
     })
     .eq("id", id);
-  assertNoError(error, "Could not update the material");
+  if (error) {
+    if (uploadedFilePath) {
+      const { error: rollbackError } = await supabase.storage
+        .from("lesson-materials")
+        .remove([uploadedFilePath]);
+      assertNoError(rollbackError, "Could not roll back the material upload");
+    }
+    assertNoError(error, "Could not update the material");
+  }
+
+  if (
+    previousFilePath &&
+    previousFilePath !== uploadedFilePath &&
+    (uploadedFilePath || clearsStoredFile)
+  ) {
+    const { error: cleanupError } = await supabase.storage
+      .from("lesson-materials")
+      .remove([previousFilePath]);
+    assertNoError(cleanupError, "Could not delete the replaced material file");
+  }
 }
 
 export async function deleteLessonMaterial(supabase: SupabaseClient, material: LessonMaterial) {
   if (material.filePath) {
-    await supabase.storage.from("lesson-materials").remove([material.filePath]);
+    const { error: storageError } = await supabase.storage
+      .from("lesson-materials")
+      .remove([material.filePath]);
+    assertNoError(storageError, "Could not delete the material file");
   }
 
   const { error } = await supabase.from("lesson_materials").delete().eq("id", material.id);
@@ -1100,6 +1141,30 @@ export async function updateProfile(supabase: SupabaseClient, id: string, patch:
     })
     .eq("id", id);
   assertNoError(error, "Could not update the profile");
+}
+
+export async function setCurrentStudentLessonProgress(
+  supabase: SupabaseClient,
+  lessonId: string,
+  completed: boolean,
+) {
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (userError || !userData.user) {
+    throw new Error("unauthorized");
+  }
+
+  const { error } = await supabase.from("lesson_progress").upsert(
+    {
+      lesson_id: lessonId,
+      student_id: userData.user.id,
+      completed,
+      completed_at: completed ? new Date().toISOString() : null,
+    },
+    { onConflict: "lesson_id,student_id" },
+  );
+  if (error) {
+    throw new Error("progressUpdateFailed");
+  }
 }
 
 export async function createStream(supabase: SupabaseClient, title: string) {

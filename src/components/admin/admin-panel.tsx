@@ -120,9 +120,11 @@ function useActionMessage(successKey = "saved") {
   const { translate } = useLocale();
   const [message, setMessage] = useState("");
   const [tone, setTone] = useState<"success" | "error">("success");
+  const [pending, setPending] = useState(false);
 
   async function run(action: () => Promise<void>) {
     setMessage("");
+    setPending(true);
     try {
       await action();
       setTone("success");
@@ -132,10 +134,12 @@ function useActionMessage(successKey = "saved") {
       setTone("error");
       setMessage(error instanceof Error ? error.message : translate("saveFailed"));
       return false;
+    } finally {
+      setPending(false);
     }
   }
 
-  return { message, run, tone };
+  return { message, run, tone, pending };
 }
 
 function ActionMessage({ message, tone }: { message: string; tone: "success" | "error" }) {
@@ -149,8 +153,15 @@ export function AdminPanel() {
   const { dataError, dataLoading } = useSchoolData();
   const [activeTab, setActiveTab] = useState<AdminTab>("courses");
   const isTeacher = profile?.role === "teacher";
-  const visibleTabs = isTeacher ? tabs.filter((tab) => tab.id === "courses") : tabs;
-  const currentTab = visibleTabs.some((tab) => tab.id === activeTab) ? activeTab : "courses";
+  const isCurator = profile?.role === "curator";
+  const visibleTabs = isTeacher
+    ? tabs.filter((tab) => tab.id === "courses")
+    : isCurator
+      ? tabs.filter((tab) => tab.id === "stats")
+      : tabs;
+  const currentTab = visibleTabs.some((tab) => tab.id === activeTab)
+    ? activeTab
+    : (visibleTabs[0]?.id ?? "courses");
 
   return (
     <main className="page-shell">
@@ -204,14 +215,14 @@ function UsersTab() {
   const { profile } = useAuth();
   const {
     data,
-    createProfile,
+    inviteUser,
     updateProfile,
     enrollStudentToCourse,
     enrollStudentToCourseByIdentifier,
     removeStudentFromCourse,
   } = useSchoolData();
   const { locale, translate } = useLocale();
-  const { message, run, tone } = useActionMessage();
+  const { message, run, tone, pending } = useActionMessage("invitationSent");
   const isTeacher = profile?.role === "teacher";
   const teacherCourses = isTeacher
     ? data.courses.filter((course) => course.teacherIds.includes(profile.id))
@@ -224,18 +235,15 @@ function UsersTab() {
       )
     : students;
 
-  async function handleCreate(event: FormEvent<HTMLFormElement>) {
+  async function handleInvite(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
     const formData = new FormData(form);
     const ok = await run(() =>
-      createProfile({
+      inviteUser({
         fullName: String(formData.get("fullName") ?? ""),
         email: String(formData.get("email") ?? ""),
-        phone: String(formData.get("phone") ?? ""),
-        telegram: String(formData.get("telegram") ?? ""),
-        schoolId: String(formData.get("schoolId") ?? ""),
-        role: String(formData.get("role") ?? "student") as UserRole,
+        role: String(formData.get("role") ?? "student") as "teacher" | "student",
       }),
     );
     if (ok) form.reset();
@@ -328,8 +336,9 @@ function UsersTab() {
       ) : (
       <>
         <section className="card">
-        <h2>{translate("createUser")}</h2>
-        <form className="form-grid" onSubmit={handleCreate}>
+        <h2>{translate("inviteUser")}</h2>
+        <p>{translate("inviteUserHint")}</p>
+        <form className="form-grid" onSubmit={handleInvite}>
           <label>
             {translate("fullName")}
             <input name="fullName" required />
@@ -339,28 +348,14 @@ function UsersTab() {
             <input name="email" required type="email" />
           </label>
           <label>
-            {translate("phone")}
-            <input name="phone" />
-          </label>
-          <label>
-            Telegram
-            <input name="telegram" />
-          </label>
-          <label>
-            {translate("schoolId")}
-            <input name="schoolId" />
-          </label>
-          <label>
             {translate("role")}
             <select name="role" defaultValue="student">
               <option value="student">{translate("student")}</option>
               <option value="teacher">{translate("teacher")}</option>
-              <option value="curator">{translate("curator")}</option>
-              <option value="admin">{translate("administrator")}</option>
             </select>
           </label>
-          <button className="button" type="submit">
-            <Plus size={16} /> {translate("create")}
+          <button className="button" disabled={pending} type="submit">
+            <Plus size={16} /> {pending ? translate("pleaseWait") : translate("sendInvitation")}
           </button>
         </form>
         <ActionMessage message={message} tone={tone} />

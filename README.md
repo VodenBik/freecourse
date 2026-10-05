@@ -12,7 +12,7 @@ FreeCourse is a self-hosted platform for independent educators, schools, trainin
 - Modules and lessons
 - Video links, text, PDF, and DOCX materials
 - Student registration and authentication
-- Administrator, coordinator, teacher, and student roles
+- Administrator, teacher, and student roles
 - Groups and learning cohorts
 - Individual and group course enrollment
 - Homework assignments
@@ -22,7 +22,6 @@ FreeCourse is a self-hosted platform for independent educators, schools, trainin
 - Scores and teacher comments
 - Lesson access rules
 - Progress tracking
-- Notifications
 - Platform settings
 - English and Russian interface
 - Supabase database, authentication, and private storage
@@ -30,8 +29,7 @@ FreeCourse is a self-hosted platform for independent educators, schools, trainin
 
 ## Roles
 
-- **Administrator** manages users, roles, courses, groups, access rules, reviews, statistics, and organization settings.
-- **Coordinator** manages assigned learning groups and operational course work.
+- **Administrator** invites teachers and students, manages existing user roles, courses, groups, access rules, reviews, statistics, and organization settings.
 - **Teacher** manages assigned courses, lessons, materials, enrollments, and submission reviews.
 - **Student** accesses assigned courses, studies lessons, submits homework, and reviews feedback.
 
@@ -105,9 +103,13 @@ Supabase project.
 ```env
 NEXT_PUBLIC_SUPABASE_URL=<SUPABASE_PROJECT_URL>
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
 ```
 
 The anon key is intended for browser use. Data access must be protected by Row Level Security.
+`SUPABASE_SERVICE_ROLE_KEY` is a server-only secret used solely by the administrator
+invitation endpoint. Never prefix it with `NEXT_PUBLIC_`, expose it in a browser bundle,
+or commit a real value.
 FreeCourse requires your own Supabase project and is not connected to the project owner's
 Supabase instance.
 

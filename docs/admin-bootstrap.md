@@ -25,4 +25,6 @@ where id = '<USER_UUID>';
 
 5. Sign out and sign in again.
 
-The first administrator can then assign administrator, coordinator, and teacher roles from the Users section.
+The first administrator can then invite teacher and student accounts from the Users section.
+The `SUPABASE_SERVICE_ROLE_KEY` required for invitations is server-only: never expose it
+with a `NEXT_PUBLIC_` prefix or commit a real value.

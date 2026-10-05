@@ -2,7 +2,7 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
-import { BookOpen, Download, FileText, Lock, PlayCircle, Send } from "lucide-react";
+import { BookOpen, CheckCircle2, Download, FileText, Lock, PlayCircle, Send } from "lucide-react";
 import { useAuth, useLocale, useSchoolData } from "@/components/providers";
 import {
   assignmentSubmissionAllowedExtensions,
@@ -23,25 +23,41 @@ const assignmentFileAccept = assignmentSubmissionAllowedExtensions
   .map((extension) => `.${extension}`)
   .join(",");
 
-function isLessonOpen(lesson: Lesson, studentId: string, groupIds: string[], data: SchoolData) {
+function isLessonOpen(
+  lesson: Lesson,
+  studentId: string,
+  groupIds: string[],
+  data: SchoolData,
+  serverEnforcedAccess: boolean,
+) {
+  if (serverEnforcedAccess) return true;
   if (lesson.isOpenByDefault) return true;
+  const streamIds = data.groups
+    .filter((group) => groupIds.includes(group.id) && group.streamId)
+    .map((group) => group.streamId);
+  const now = Date.now();
   return data.lessonAccess.some(
     (access) =>
       access.lessonId === lesson.id &&
       access.isOpen &&
+      (!access.startsAt || new Date(access.startsAt).getTime() <= now) &&
+      (!access.endsAt || new Date(access.endsAt).getTime() >= now) &&
       ((access.targetType === "student" && access.targetId === studentId) ||
-        (access.targetType === "group" && groupIds.includes(access.targetId))),
+        (access.targetType === "group" && groupIds.includes(access.targetId)) ||
+        (access.targetType === "stream" && streamIds.includes(access.targetId))),
   );
 }
 
 export function StudentDashboard() {
-  const { profile } = useAuth();
-  const { data, dataLoading, submitAssignment } = useSchoolData();
+  const { authMode, profile } = useAuth();
+  const { data, dataLoading, setLessonProgress, submitAssignment } = useSchoolData();
   const { locale, translate } = useLocale();
   const [activeCourseId, setActiveCourseId] = useState(profile?.assignedCourseIds[0] ?? data.courses[0]?.id);
   const [answerByAssignment, setAnswerByAssignment] = useState<Record<string, string>>({});
   const [errorByAssignment, setErrorByAssignment] = useState<Record<string, string>>({});
   const [submittingAssignmentId, setSubmittingAssignmentId] = useState<string | null>(null);
+  const [progressErrorByLesson, setProgressErrorByLesson] = useState<Record<string, string>>({});
+  const [updatingLessonId, setUpdatingLessonId] = useState<string | null>(null);
 
   const student = profile;
 
@@ -133,6 +149,25 @@ export function StudentDashboard() {
     }
   }
 
+  async function handleSetLessonProgress(lessonId: string, completed: boolean) {
+    setProgressErrorByLesson((current) => ({ ...current, [lessonId]: "" }));
+    setUpdatingLessonId(lessonId);
+    try {
+      await setLessonProgress(lessonId, completed);
+    } catch (error) {
+      const errorKey = error instanceof Error ? error.message : "progressUpdateFailed";
+      setProgressErrorByLesson((current) => ({
+        ...current,
+        [lessonId]:
+          errorKey === "unauthorized" || errorKey === "progressUpdateFailed"
+            ? translate(errorKey)
+            : errorKey,
+      }));
+    } finally {
+      setUpdatingLessonId(null);
+    }
+  }
+
   if (!student) {
     return null;
   }
@@ -168,11 +203,15 @@ export function StudentDashboard() {
               course={activeCourse}
               studentId={student.id}
               groupIds={student.groupIds}
+              serverEnforcedAccess={authMode === "supabase"}
               answerByAssignment={answerByAssignment}
               errorByAssignment={errorByAssignment}
               submittingAssignmentId={submittingAssignmentId}
+              progressErrorByLesson={progressErrorByLesson}
+              updatingLessonId={updatingLessonId}
               setAnswerByAssignment={setAnswerByAssignment}
             onSubmitAssignment={handleSubmitAssignment}
+            onSetLessonProgress={handleSetLessonProgress}
             locale={locale}
             translate={translate}
           />
@@ -281,22 +320,30 @@ function CourseContent({
   course,
   studentId,
   groupIds,
+  serverEnforcedAccess,
   answerByAssignment,
   errorByAssignment,
   submittingAssignmentId,
+  progressErrorByLesson,
+  updatingLessonId,
   setAnswerByAssignment,
   onSubmitAssignment,
+  onSetLessonProgress,
   locale,
   translate,
 }: {
   course: Course;
   studentId: string;
   groupIds: string[];
+  serverEnforcedAccess: boolean;
   answerByAssignment: Record<string, string>;
   errorByAssignment: Record<string, string>;
   submittingAssignmentId: string | null;
+  progressErrorByLesson: Record<string, string>;
+  updatingLessonId: string | null;
   setAnswerByAssignment: Dispatch<SetStateAction<Record<string, string>>>;
   onSubmitAssignment: (event: FormEvent<HTMLFormElement>, assignment: Assignment) => Promise<void>;
+  onSetLessonProgress: (lessonId: string, completed: boolean) => Promise<void>;
   locale: Locale;
   translate: (key: string) => string;
 }) {
@@ -305,13 +352,17 @@ function CourseContent({
     .filter((item) => item.courseId === course.id)
     .sort((a, b) => a.order - b.order);
 
-  const completed = data.lessonProgress.filter(
-    (item) => item.studentId === studentId && item.completed,
-  ).length;
   const allLessons = modules.flatMap((module) =>
     data.lessons.filter((lesson) => lesson.moduleId === module.id),
   );
-  const progress = allLessons.length ? Math.round((completed / allLessons.length) * 100) : 0;
+  const availableLessons = allLessons.filter((lesson) =>
+    isLessonOpen(lesson, studentId, groupIds, data, serverEnforcedAccess),
+  );
+  const availableLessonIds = new Set(availableLessons.map((lesson) => lesson.id));
+  const completed = data.lessonProgress.filter(
+    (item) => item.studentId === studentId && item.completed && availableLessonIds.has(item.lessonId),
+  ).length;
+  const progress = availableLessons.length ? Math.round((completed / availableLessons.length) * 100) : 0;
 
   return (
     <section className="card">
@@ -337,16 +388,29 @@ function CourseContent({
               <p>{module.description}</p>
               <div className="grid">
                 {lessons.map((lesson) => {
-                  const open = isLessonOpen(lesson, studentId, groupIds, data);
+                  const open = isLessonOpen(
+                    lesson,
+                    studentId,
+                    groupIds,
+                    data,
+                    serverEnforcedAccess,
+                  );
                   const materials = data.materials
                     .filter((item) => item.lessonId === lesson.id)
                     .sort((a, b) => a.order - b.order);
                   const assignment = data.assignments.find((item) => item.lessonId === lesson.id);
+                  const lessonProgress = data.lessonProgress.find(
+                    (item) => item.lessonId === lesson.id && item.studentId === studentId,
+                  );
                   const submission = assignment
                     ? data.submissions.find(
                         (item) => item.assignmentId === assignment.id && item.studentId === studentId,
                       )
                     : undefined;
+                  const canEditSubmission =
+                    !submission ||
+                    (submission.status !== "accepted" &&
+                      (!submission.reviewedAt || submission.status === "needs_revision"));
 
                   return (
                     <article className={`lesson-card card compact ${open ? "" : "locked"}`} key={lesson.id}>
@@ -367,6 +431,29 @@ function CourseContent({
                       {open ? (
                         <>
                           <p>{lesson.content}</p>
+                          <div className="lesson-strip">
+                            <span>
+                              <CheckCircle2 size={18} />
+                              {lessonProgress?.completed
+                                ? translate("lessonCompleted")
+                                : translate("lessonNotCompleted")}
+                            </span>
+                            <button
+                              className="secondary-button"
+                              disabled={updatingLessonId === lesson.id}
+                              onClick={() => void onSetLessonProgress(lesson.id, !lessonProgress?.completed)}
+                              type="button"
+                            >
+                              {updatingLessonId === lesson.id
+                                ? translate("pleaseWait")
+                                : lessonProgress?.completed
+                                  ? translate("markLessonIncomplete")
+                                  : translate("markLessonCompleted")}
+                            </button>
+                          </div>
+                          {progressErrorByLesson[lesson.id] ? (
+                            <p className="error">{progressErrorByLesson[lesson.id]}</p>
+                          ) : null}
                           <div className="grid">
                             {materials.map((material) => (
                               <div className="lesson-strip" key={material.id}>
@@ -426,10 +513,11 @@ function CourseContent({
                                 <SubmissionFiles files={submission.files} translate={translate} />
                               ) : null}
 
-                              <form
-                                className="form-grid"
-                                onSubmit={(event) => onSubmitAssignment(event, assignment)}
-                              >
+                              {canEditSubmission ? (
+                                <form
+                                  className="form-grid"
+                                  onSubmit={(event) => onSubmitAssignment(event, assignment)}
+                                >
                                 {assignment.allowTextAnswer ? (
                                   <label>
                                     {translate("answer")}
@@ -470,7 +558,8 @@ function CourseContent({
                                     ? translate("pleaseWait")
                                     : translate("submitWork")}
                                 </button>
-                              </form>
+                                </form>
+                              ) : null}
                             </div>
                           ) : null}
                         </>

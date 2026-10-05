@@ -55,7 +55,7 @@ type DataContextValue = {
   schoolSettings: SchoolSettings;
   refreshData: () => Promise<void>;
   saveSchoolSettings: (settings: SchoolSettings) => Promise<void>;
-  createProfile: (profile: Omit<Profile, "id" | "groupIds" | "assignedCourseIds">) => Promise<void>;
+  inviteUser: (payload: { fullName: string; email: string; role: "teacher" | "student" }) => Promise<void>;
   updateProfile: (id: string, patch: Partial<Profile>) => Promise<void>;
   createCourse: (
     draft: Pick<Course, "title" | "description"> &
@@ -117,6 +117,7 @@ type DataContextValue = {
     id: string,
     patch: Pick<AssignmentSubmission, "status" | "score" | "reviewerComment">,
   ) => Promise<void>;
+  setLessonProgress: (lessonId: string, completed: boolean) => Promise<void>;
   createStream: (title: string) => Promise<void>;
   createGroup: (draft: { title: string; streamId?: string; curatorId?: string }) => Promise<void>;
   addStudentToGroup: (groupId: string, studentId: string) => Promise<void>;
@@ -416,22 +417,29 @@ export function AppProviders({ children }: { children: ReactNode }) {
           JSON.stringify(normalizedSettings),
         );
       },
-      async createProfile(profileDraft) {
-        if (getSupabaseBrowserClient()) {
-          throw new Error(t("supabaseCreateProfileBlocked", locale));
+      async inviteUser(payload) {
+        const supabase = getSupabaseBrowserClient();
+        if (!supabase) {
+          throw new Error(t("invitationsRequireSupabase", locale));
         }
-        setData((current) => ({
-          ...current,
-          profiles: [
-            ...current.profiles,
-            {
-              ...profileDraft,
-              id: crypto.randomUUID(),
-              groupIds: [],
-              assignedCourseIds: [],
-            },
-          ],
-        }));
+        const { data: sessionData } = await supabase.auth.getSession();
+        const token = sessionData.session?.access_token;
+        if (!token) {
+          throw new Error(t("unauthorized", locale));
+        }
+        const response = await fetch("/api/admin/invitations", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        });
+        const result = (await response.json().catch(() => null)) as { code?: string } | null;
+        if (!response.ok) {
+          throw new Error(t(result?.code ?? "invitationFailed", locale));
+        }
+        await reloadAfterMutation();
       },
       async updateProfile(id, patch) {
         const supabase = getSupabaseBrowserClient();
@@ -830,6 +838,36 @@ export function AppProviders({ children }: { children: ReactNode }) {
                   },
                 ]
               : current.notifications,
+          };
+        });
+      },
+      async setLessonProgress(lessonId, completed) {
+        const supabase = getSupabaseBrowserClient();
+        if (supabase) {
+          await schoolApi.setCurrentStudentLessonProgress(supabase, lessonId, completed);
+          await reloadAfterMutation();
+          return;
+        }
+        if (!profile || profile.role !== "student") {
+          throw new Error(t("unauthorized", locale));
+        }
+        setData((current) => {
+          const existing = current.lessonProgress.find(
+            (item) => item.lessonId === lessonId && item.studentId === profile.id,
+          );
+          const nextProgress = {
+            id: existing?.id ?? crypto.randomUUID(),
+            lessonId,
+            studentId: profile.id,
+            completed,
+            completedAt: completed ? new Date().toISOString() : undefined,
+          };
+          return {
+            ...current,
+            lessonProgress: [
+              ...current.lessonProgress.filter((item) => item !== existing),
+              nextProgress,
+            ],
           };
         });
       },
