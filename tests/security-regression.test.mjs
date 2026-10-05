@@ -10,6 +10,10 @@ const atomicCourseCreation = readFileSync(
   new URL("../supabase/migrations/0015_atomic_course_creation.sql", import.meta.url),
   "utf8",
 );
+const submissionReturningPolicy = readFileSync(
+  new URL("../supabase/migrations/0016_submission_returning_read_policy.sql", import.meta.url),
+  "utf8",
+);
 const initialSchema = readFileSync(
   new URL("../supabase/migrations/0001_initial_schema.sql", import.meta.url),
   "utf8",
@@ -115,6 +119,14 @@ test("submission, grade, and teacher access remain scoped by RLS", () => {
   assert.match(roleAccess, /private\.can_read_submission\(submission_id\)/);
   assert.match(roleAccess, /private\.is_course_teacher\(p_course_id\)/);
   assert.match(roleAccess, /admin manage course staff/);
+});
+
+test("submission reads use row-scoped access so INSERT RETURNING is safe", () => {
+  assert.match(submissionReturningPolicy, /student_id = auth\.uid\(\)/);
+  assert.match(submissionReturningPolicy, /private\.current_user_role\(\) = 'admin'/);
+  assert.match(submissionReturningPolicy, /private\.can_manage_assignment\(assignment_id\)/);
+  assert.doesNotMatch(submissionReturningPolicy, /using \(true\)|with check \(true\)/i);
+  assert.doesNotMatch(submissionReturningPolicy, /private\.can_read_submission\(id\)/);
 });
 
 test("both application buckets remain private", () => {
