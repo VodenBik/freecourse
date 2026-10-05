@@ -564,35 +564,17 @@ export async function saveSchoolSettings(
 export async function createCourse(
   supabase: SupabaseClient,
   draft: Pick<Course, "title" | "description"> &
-    Partial<Pick<Course, "language" | "active" | "accessMode">> & {
-      creatorTeacherId?: string;
-    },
+    Partial<Pick<Course, "language" | "active" | "accessMode">>,
 ) {
-  const courseId = crypto.randomUUID();
-  const { error } = await supabase.from("courses").insert({
-    id: courseId,
-    title: draft.title,
-    description: draft.description,
-    language: draft.language ?? "ru",
-    is_active: draft.active ?? true,
-    access_mode: draft.accessMode ?? "manual",
-    created_by: draft.creatorTeacherId ?? null,
+  const { data, error } = await supabase.rpc("create_course_for_current_user", {
+    p_title: draft.title,
+    p_description: draft.description,
+    p_language: draft.language ?? "ru",
+    p_is_active: draft.active ?? true,
+    p_access_mode: draft.accessMode ?? "manual",
   });
   assertNoError(error, "Could not create the course");
-
-  if (draft.creatorTeacherId) {
-    const { error: staffError } = await supabase.from("course_staff").upsert(
-      {
-        course_id: courseId,
-        profile_id: draft.creatorTeacherId,
-        role: "teacher",
-      },
-      { onConflict: "course_id,profile_id" },
-    );
-    assertNoError(staffError, "Could not assign the teacher to the course");
-  }
-
-  return courseId;
+  return asString(data && typeof data === "object" ? (data as Row).id : data);
 }
 
 export async function updateCourse(supabase: SupabaseClient, id: string, patch: Partial<Course>) {

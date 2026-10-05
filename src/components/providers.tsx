@@ -458,9 +458,8 @@ export function AppProviders({ children }: { children: ReactNode }) {
       },
       async createCourse(draft) {
         const supabase = getSupabaseBrowserClient();
-        const creatorTeacherId = profile?.role === "teacher" ? profile.id : undefined;
         if (supabase) {
-          await schoolApi.createCourse(supabase, { ...draft, creatorTeacherId });
+          await schoolApi.createCourse(supabase, draft);
           await reloadAfterMutation();
           return;
         }
@@ -479,7 +478,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
               accessMode: draft.accessMode ?? "manual",
               groupIds: [],
               streamIds: [],
-              teacherIds: creatorTeacherId ? [creatorTeacherId] : [],
+              teacherIds: profile?.role === "teacher" ? [profile.id] : [],
               createdAt: now,
               updatedAt: now,
             },

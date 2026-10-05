@@ -6,6 +6,10 @@ const migration = readFileSync(
   new URL("../supabase/migrations/0014_stage1_security_hardening.sql", import.meta.url),
   "utf8",
 );
+const atomicCourseCreation = readFileSync(
+  new URL("../supabase/migrations/0015_atomic_course_creation.sql", import.meta.url),
+  "utf8",
+);
 const initialSchema = readFileSync(
   new URL("../supabase/migrations/0001_initial_schema.sql", import.meta.url),
   "utf8",
@@ -143,6 +147,21 @@ test("teacher enrollment has no profile-update bypass and validates active owned
   assert.match(enrollmentFunction, /profile\.role = 'student'/);
   assert.match(enrollmentFunction, /on conflict do nothing/);
   assert.match(migration, /course_enrollments_direct_student_unique/);
+});
+
+test("course creation is atomic, caller-owned, and restricted to teachers or admins", () => {
+  assert.match(atomicCourseCreation, /create_course_for_current_user/);
+  assert.match(atomicCourseCreation, /v_caller uuid := auth\.uid\(\)/);
+  assert.match(atomicCourseCreation, /v_role not in \('admin', 'teacher'\)/);
+  assert.match(atomicCourseCreation, /created_by[\s\S]*v_caller/);
+  assert.match(atomicCourseCreation, /insert into public\.course_staff/);
+  assert.match(atomicCourseCreation, /security definer/);
+  assert.match(atomicCourseCreation, /set search_path = public, pg_temp/);
+  assert.match(atomicCourseCreation, /revoke execute[\s\S]*from public, anon/);
+  assert.match(atomicCourseCreation, /grant execute[\s\S]*to authenticated/);
+  assert.doesNotMatch(atomicCourseCreation, /p_created_by|p_teacher_id|p_owner_id/);
+  assert.match(schoolApi, /rpc\("create_course_for_current_user"/);
+  assert.doesNotMatch(schoolApi, /creatorTeacherId/);
 });
 
 test("admin invitations stay server-only and permit only teachers and students", () => {
