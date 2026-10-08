@@ -17,10 +17,11 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const form = event.currentTarget;
     setError("");
     setMessage("");
 
-    const formData = new FormData(event.currentTarget);
+    const formData = new FormData(form);
     const email = String(formData.get("email") ?? "");
     const password = String(formData.get("password") ?? "");
     const passwordRepeat = String(formData.get("passwordRepeat") ?? "");
@@ -33,26 +34,31 @@ export function AuthForm({ mode }: { mode: AuthMode }) {
     }
 
     setLoading(true);
-    const result: { error?: string; message?: string } =
-      mode === "login"
-        ? await signIn(email, password)
-        : mode === "register"
-          ? await signUp({ fullName, email, password, phone })
-          : await resetPassword(email);
+    try {
+      const result: { error?: string; message?: string } =
+        mode === "login"
+          ? await signIn(email, password)
+          : mode === "register"
+            ? await signUp({ fullName, email, password, phone })
+            : await resetPassword(email);
 
-    setLoading(false);
-    if (result.error) {
-      setError(result.error);
-      return;
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+
+      if (mode === "reset" || mode === "register") {
+        setMessage(result.message ?? translate("ready"));
+        form.reset();
+        return;
+      }
+
+      router.replace("/dashboard");
+    } catch {
+      setError(mode === "reset" ? translate("passwordResetRequestFailed") : translate("authRequestFailed"));
+    } finally {
+      setLoading(false);
     }
-
-    if (mode === "reset" || mode === "register") {
-      setMessage(result.message ?? translate("ready"));
-      event.currentTarget.reset();
-      return;
-    }
-
-    router.replace("/dashboard");
   }
 
   const title =

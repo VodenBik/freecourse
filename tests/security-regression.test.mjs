@@ -43,6 +43,12 @@ const invitationRoute = readFileSync(
   new URL("../src/app/api/admin/invitations/route.ts", import.meta.url),
   "utf8",
 );
+const resetPasswordPage = readFileSync(
+  new URL("../src/app/reset-password/page.tsx", import.meta.url),
+  "utf8",
+);
+const supabaseClient = readFileSync(new URL("../src/lib/supabase.ts", import.meta.url), "utf8");
+const authForm = readFileSync(new URL("../src/components/auth/auth-form.tsx", import.meta.url), "utf8");
 const providers = readFileSync(new URL("../src/components/providers.tsx", import.meta.url), "utf8");
 const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
 
@@ -183,7 +189,30 @@ test("admin invitations stay server-only and permit only teachers and students",
   assert.match(invitationRoute, /auth\.getUser\(token\)/);
   assert.match(invitationRoute, /callerProfile\?\.role !== "admin"/);
   assert.match(invitationRoute, /inviteUserByEmail/);
+  assert.match(invitationRoute, /redirectTo: inviteRedirectUrl/);
+  assert.match(invitationRoute, /NEXT_PUBLIC_SITE_URL/);
+  assert.doesNotMatch(invitationRoute, /body\.redirectTo|body\.redirect_url/);
   assert.match(providers, /fetch\("\/api\/admin\/invitations"/);
+});
+
+test("invite and recovery password setup require the linked identity", () => {
+  assert.match(supabaseClient, /detectSessionInUrl: false/);
+  assert.match(resetPasswordPage, /linkType === "invite"/);
+  assert.match(resetPasswordPage, /exchangeResult\.data\.user\?\.id/);
+  assert.match(resetPasswordPage, /userData\.user\?\.id !== expectedUserId/);
+  assert.match(resetPasswordPage, /userData\.user\?\.id !== passwordSetupUserId/);
+  assert.match(resetPasswordPage, /resetPasswordSetupLinkInvalid/);
+});
+
+test("async auth form submission keeps a stable form reference for reset and registration", () => {
+  assert.match(authForm, /const form = event\.currentTarget/);
+  assert.match(authForm, /new FormData\(form\)/);
+  assert.match(authForm, /form\.reset\(\)/);
+  assert.doesNotMatch(authForm, /event\.currentTarget\.reset\(\)/);
+  assert.match(authForm, /finally\s*\{\s*setLoading\(false\)/);
+  assert.match(providers, /safeAuthErrorMessage/);
+  assert.match(providers, /normalizedMessage !== "\{\}"/);
+  assert.match(providers, /passwordResetRequestFailed/);
 });
 
 test("progress uses the authenticated user rather than a client supplied student id", () => {

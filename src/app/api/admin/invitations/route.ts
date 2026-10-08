@@ -16,11 +16,32 @@ function isEmail(value: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
+function getInviteRedirectUrl() {
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL;
+  if (!siteUrl) return null;
+
+  try {
+    const origin = new URL(siteUrl);
+    if (
+      (origin.protocol !== "http:" && origin.protocol !== "https:") ||
+      origin.username ||
+      origin.password
+    ) {
+      return null;
+    }
+
+    return new URL("/reset-password", origin.origin).toString();
+  } catch {
+    return null;
+  }
+}
+
 export async function POST(request: Request) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !anonKey || !serviceRoleKey) {
+  const inviteRedirectUrl = getInviteRedirectUrl();
+  if (!url || !anonKey || !serviceRoleKey || !inviteRedirectUrl) {
     return jsonError("invitationsNotConfigured", 503);
   }
 
@@ -66,6 +87,7 @@ export async function POST(request: Request) {
   });
   const { data: inviteData, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email, {
     data: { full_name: fullName },
+    redirectTo: inviteRedirectUrl,
   });
   if (inviteError || !inviteData.user) {
     return jsonError("invitationFailed", 409);

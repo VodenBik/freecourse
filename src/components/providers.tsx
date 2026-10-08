@@ -27,6 +27,20 @@ import {
 import { defaultLocale, localeStorageKey, locales, t } from "@/lib/i18n";
 import * as schoolApi from "@/lib/school-api";
 
+function safeAuthErrorMessage(error: unknown, fallback: string) {
+  if (error && typeof error === "object" && "message" in error) {
+    const message = (error as { message?: unknown }).message;
+    if (typeof message === "string") {
+      const normalizedMessage = message.trim();
+      if (normalizedMessage && normalizedMessage !== "{}" && normalizedMessage !== "[object Object]") {
+        return normalizedMessage;
+      }
+    }
+  }
+
+  return fallback;
+}
+
 type LocaleContextValue = {
   locale: Locale;
   setLocale: (locale: Locale) => void;
@@ -366,10 +380,16 @@ export function AppProviders({ children }: { children: ReactNode }) {
   const resetPassword: AuthContextValue["resetPassword"] = async (email) => {
     const supabase = getSupabaseBrowserClient();
     if (supabase) {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: getPasswordResetRedirectUrl(),
-      });
-      return error ? { error: error.message } : { message: t("passwordResetSent", locale) };
+      try {
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: getPasswordResetRedirectUrl(),
+        });
+        return error
+          ? { error: safeAuthErrorMessage(error, t("passwordResetRequestFailed", locale)) }
+          : { message: t("passwordResetSent", locale) };
+      } catch (error) {
+        return { error: safeAuthErrorMessage(error, t("passwordResetRequestFailed", locale)) };
+      }
     }
 
     return { message: t("localPasswordHint", locale) };

@@ -103,6 +103,7 @@ Supabase project.
 ```env
 NEXT_PUBLIC_SUPABASE_URL=<SUPABASE_PROJECT_URL>
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
+NEXT_PUBLIC_SITE_URL=http://localhost:3000
 SUPABASE_SERVICE_ROLE_KEY=
 ```
 
@@ -110,6 +111,8 @@ The anon key is intended for browser use. Data access must be protected by Row L
 `SUPABASE_SERVICE_ROLE_KEY` is a server-only secret used solely by the administrator
 invitation endpoint. Never prefix it with `NEXT_PUBLIC_`, expose it in a browser bundle,
 or commit a real value.
+`NEXT_PUBLIC_SITE_URL` is the public application origin. It is used only to construct the
+fixed FreeCourse invitation setup URL; set it to the deployed HTTPS origin before production.
 FreeCourse requires your own Supabase project and is not connected to the project owner's
 Supabase instance.
 

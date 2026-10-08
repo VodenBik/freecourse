@@ -19,7 +19,8 @@ function errorMessage(error: unknown, fallback: string) {
 export default function ResetPasswordPage() {
   const { translate } = useLocale();
   const [checking, setChecking] = useState(true);
-  const [recoveryMode, setRecoveryMode] = useState(false);
+  const [passwordSetupUserId, setPasswordSetupUserId] = useState<string | null>(null);
+  const [passwordSetupAttempted, setPasswordSetupAttempted] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
@@ -27,25 +28,28 @@ export default function ResetPasswordPage() {
   useEffect(() => {
     let cancelled = false;
 
-    async function prepareRecoverySession() {
+    async function preparePasswordSetupSession() {
       const params = new URLSearchParams(window.location.search);
       const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
       const code = params.get("code");
       const accessToken = hashParams.get("access_token") ?? params.get("access_token");
       const refreshToken = hashParams.get("refresh_token") ?? params.get("refresh_token");
       const linkError = hashParams.get("error_description") ?? params.get("error_description");
-      const isRecoveryLink = Boolean(code || accessToken || hashParams.get("type") === "recovery");
+      const linkType = hashParams.get("type") ?? params.get("type");
+      const supportedLinkType = linkType === "recovery" || linkType === "invite";
+      const isPasswordSetupLink = Boolean(code || (accessToken && refreshToken)) &&
+        (!linkType || supportedLinkType);
 
-      if (linkError) {
+      if (linkError || (linkType && !supportedLinkType)) {
         if (!cancelled) {
-          setError(linkError);
-          setRecoveryMode(true);
+          setError(translate("resetPasswordSetupLinkInvalid"));
+          setPasswordSetupAttempted(true);
           setChecking(false);
         }
         return;
       }
 
-      if (!isRecoveryLink) {
+      if (!isPasswordSetupLink) {
         if (!cancelled) setChecking(false);
         return;
       }
@@ -54,44 +58,50 @@ export default function ResetPasswordPage() {
       if (!supabase) {
         if (!cancelled) {
           setError(translate("authCallbackNoConfig"));
-          setRecoveryMode(true);
+          setPasswordSetupAttempted(true);
           setChecking(false);
         }
         return;
       }
 
       try {
+        let expectedUserId: string | undefined;
         if (code) {
-          const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
-          if (exchangeError) throw exchangeError;
+          const exchangeResult = await supabase.auth.exchangeCodeForSession(code);
+          if (exchangeResult.error) throw exchangeResult.error;
+          expectedUserId = exchangeResult.data.user?.id ?? exchangeResult.data.session?.user.id;
         } else if (accessToken && refreshToken) {
-          const { error: sessionError } = await supabase.auth.setSession({
+          const sessionResult = await supabase.auth.setSession({
             access_token: accessToken,
             refresh_token: refreshToken,
           });
-          if (sessionError) throw sessionError;
+          if (sessionResult.error) throw sessionResult.error;
+          expectedUserId = sessionResult.data.user?.id ?? sessionResult.data.session?.user.id;
         }
 
-        const { data, error: getSessionError } = await supabase.auth.getSession();
-        if (getSessionError) throw getSessionError;
-        if (!data.session) throw new Error(translate("resetLinkInvalid"));
+        if (!expectedUserId) throw new Error(translate("resetPasswordSetupLinkInvalid"));
+
+        const { data: userData, error: getUserError } = await supabase.auth.getUser();
+        if (getUserError || userData.user?.id !== expectedUserId) {
+          throw new Error(translate("resetPasswordSetupLinkInvalid"));
+        }
 
         window.history.replaceState({}, document.title, "/reset-password");
         if (!cancelled) {
-          setRecoveryMode(true);
+          setPasswordSetupUserId(expectedUserId);
           setError("");
         }
-      } catch (sessionError) {
+      } catch {
         if (!cancelled) {
-          setRecoveryMode(true);
-          setError(errorMessage(sessionError, translate("resetLinkInvalid")));
+          setPasswordSetupAttempted(true);
+          setError(translate("resetPasswordSetupLinkInvalid"));
         }
       } finally {
         if (!cancelled) setChecking(false);
       }
     }
 
-    void prepareRecoverySession();
+    void preparePasswordSetupSession();
 
     return () => {
       cancelled = true;
@@ -119,12 +129,22 @@ export default function ResetPasswordPage() {
     }
 
     const supabase = getSupabaseBrowserClient();
-    if (!supabase) {
+    if (!supabase || !passwordSetupUserId) {
       setError(translate("authCallbackNoConfig"));
       return;
     }
 
     setLoading(true);
+    const { data: userData, error: userError } = await supabase.auth.getUser();
+    if (userError || userData.user?.id !== passwordSetupUserId) {
+      await supabase.auth.signOut();
+      setLoading(false);
+      setPasswordSetupUserId(null);
+      setPasswordSetupAttempted(true);
+      setError(translate("resetPasswordSetupLinkInvalid"));
+      return;
+    }
+
     const { error: updateError } = await supabase.auth.updateUser({ password });
     setLoading(false);
 
@@ -149,8 +169,22 @@ export default function ResetPasswordPage() {
     );
   }
 
-  if (!recoveryMode) {
+  if (!passwordSetupUserId && !passwordSetupAttempted) {
     return <AuthForm mode="reset" />;
+  }
+
+  if (!passwordSetupUserId) {
+    return (
+      <main className="form-page">
+        <section className="form-card">
+          <h1 style={{ fontSize: 34 }}>{translate("newPasswordTitle")}</h1>
+          <p className="error">{error || translate("resetPasswordSetupLinkInvalid")}</p>
+          <div className="action-row">
+            <Link href="/login">{translate("goToLogin")}</Link>
+          </div>
+        </section>
+      </main>
+    );
   }
 
   return (

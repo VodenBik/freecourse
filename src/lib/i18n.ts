@@ -74,6 +74,14 @@ const dictionary: Dictionary = {
     "If an account exists for that email address, we will send password reset instructions.",
     "Если такой e-mail зарегистрирован, мы отправим инструкцию для восстановления пароля.",
   ),
+  passwordResetRequestFailed: text(
+    "We could not send the password reset email. Please try again later.",
+    "Не удалось отправить письмо для восстановления пароля. Попробуйте позже.",
+  ),
+  authRequestFailed: text(
+    "We could not complete the request. Please try again.",
+    "Не удалось выполнить запрос. Попробуйте еще раз.",
+  ),
   newPasswordTitle: text("Create a new password", "Новый пароль"),
   newPasswordDescription: text(
     "Enter a new password for your account.",
@@ -92,6 +100,10 @@ const dictionary: Dictionary = {
   resetLinkInvalid: text(
     "This password reset link is invalid or has expired. Request a new email.",
     "Ссылка восстановления недействительна или устарела. Запросите новое письмо.",
+  ),
+  resetPasswordSetupLinkInvalid: text(
+    "This password setup link is invalid or has expired. Request a new email or invitation.",
+    "Ссылка для установки пароля недействительна или устарела. Запросите новое письмо или приглашение.",
   ),
   saveNewPassword: text("Save new password", "Сохранить новый пароль"),
   authCallbackTitle: text("Confirming your email", "Подтверждение e-mail"),
