@@ -14,3 +14,7 @@ supabase/.temp/
 scripts/stage2a-*.mjs
 coverage/
 test-reports/
+.open-next/
+.wrangler/
+.dev.vars
+.dev.vars.*

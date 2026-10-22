@@ -9,29 +9,38 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit --incremental false",
-    "test": "node --test tests/*.test.mjs"
+    "test": "node --test tests/*.test.mjs",
+    "build:cloudflare": "opennextjs-cloudflare build && node scripts/strip-cloudflare-build-env.mjs",
+    "preview": "npm run build:cloudflare && opennextjs-cloudflare preview",
+    "deploy": "npm run build:cloudflare && opennextjs-cloudflare deploy"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.75.0",
     "lucide-react": "^0.468.0",
-    "next": "^16.3.6",
-    "react": "^19.2.4",
-    "react-dom": "^19.2.4"
+    "next": "16.4.2",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "react-server-dom-webpack": "19.3.1"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
+    "@opennextjs/cloudflare": "1.20.13",
     "@types/node": "^22.10.2",
     "@types/react": "^19.0.2",
     "@types/react-dom": "^19.0.2",
     "eslint": "^9.17.0",
-    "eslint-config-next": "^16.3.6",
-    "typescript": "^5.7.2"
+    "eslint-config-next": "16.4.2",
+    "typescript": "^5.7.2",
+    "wrangler": "4.151.3"
   },
   "overrides": {
     "baseline-browser-mapping": "^2.11.0",
     "nanoid": "^3.3.18",
     "postcss": "^8.5.18",
     "sharp": "^0.35.4",
-    "source-map-js": "^1.2.2"
+    "source-map-js": "^1.2.2",
+    "webpack": {
+      "browserslist": "4.28.7"
+    }
   }
 }
